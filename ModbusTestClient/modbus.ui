@@ -86,22 +86,22 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="QComboBox" name="comboBox"/>
+        <widget class="QComboBox" name="comboBoxPort"/>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_2"/>
+        <widget class="QComboBox" name="comboBoxSpeed"/>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_3"/>
+        <widget class="QComboBox" name="comboBoxDataBits"/>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_4"/>
+        <widget class="QComboBox" name="comboBoxStopBits"/>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_5"/>
+        <widget class="QComboBox" name="comboBoxParity"/>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_6"/>
+        <widget class="QComboBox" name="comboBoxFlowControl"/>
        </item>
       </layout>
      </item>
