@@ -1,5 +1,10 @@
+#include "modbustest.h"
+#include "./ui_modbustest.h"
 #include "modbus.h"
-#include "./ui_modbus.h"
+#include "modbus-rtu.h"
+#include "unit-test.h"
+#include "modbus-tcp.h"
+#include "modbus-version.h"
 
 int Modbus::setComboxDefalutIndex(QComboBox *combox, const QString &str)
 {
@@ -188,9 +193,67 @@ void Modbus::on_btnApplyConfig_clicked()
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"baudRate", strSpeed);
 }
 
+#define BUG_REPORT(_cond, _format, _args...) \
+    printf(                                  \
+	"\nLine %d: assertion error for '%s': " _format "\n", __LINE__, #_cond, ##_args)
+
+#define ASSERT_TRUE(_cond, _format, __args...)    \
+    {                                             \
+	if (_cond) {                              \
+	    printf("OK\n");                       \
+	} else {                                  \
+	    BUG_REPORT(_cond, _format, ##__args); \
+	    goto close;                           \
+	}                                         \
+    };
+
 void Modbus::on_btnStart_clicked()
 {
 	setSerialParameters();
+
+	modbus_new_rtu("COM4", 115200, 'N', 8, 1);
+	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
+	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
+	uint8_t *tab_rp_bits = NULL;
+	uint16_t *tab_rp_registers = NULL;
+	uint16_t *tab_rp_registers_bad = NULL;
+	modbus_t *ctx = NULL;
+	int i;
+	uint8_t value;
+	int nb_points;
+	int rc;
+	float real;
+	uint32_t old_response_to_sec;
+	uint32_t old_response_to_usec;
+	uint32_t new_response_to_sec;
+	uint32_t new_response_to_usec;
+	uint32_t old_byte_to_sec;
+	uint32_t old_byte_to_usec;
+	int use_backend;
+	int success = FALSE;
+	int old_slave;
+	char *ip_or_device;
+
+	if (argc > 1) {
+		if (strcmp(argv[1], "tcp") == 0) {
+			use_backend = TCP;
+		} else if (strcmp(argv[1], "tcppi") == 0) {
+			use_backend = TCP_PI;
+		} else if (strcmp(argv[1], "rtu") == 0) {
+			use_backend = RTU;
+		} else {
+			printf("Modbus client for unit testing\n");
+			printf("Usage:\n  %s [tcp|tcppi|rtu]\n", argv[0]);
+			printf("Eg. tcp 127.0.0.1 or rtu /dev/ttyUSB1\n\n");
+			exit(1);
+		}
+	} else {
+		/* By default */
+		use_backend = TCP;
+	}
+
+	//modbus_set_slave(ctx, 0x11);
+	//modbus_set_debug(ctx, true);
 }
 
 void Modbus::on_radioButtonRtu_clicked()

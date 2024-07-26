@@ -1,4 +1,4 @@
-#include "modbus.h"
+#include "modbustest.h"
 
 #include <QApplication>
 
