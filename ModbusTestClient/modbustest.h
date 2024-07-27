@@ -8,10 +8,18 @@
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QComboBox>
+#include <pthread.h>
 
 #define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
 #define DEFAULT_SERIAL_SECTION_NAME "/SerialConfig/"
-#define MODBUS_PROTOCOL "/Protocol/"
+#define MODBUS_PROTOCOL_SECTION_NAME "/Protocol/"
+#define IP_SECTION_NAME "/IP/"
+
+enum {
+	TCP,
+	TCP_PI,
+	RTU
+};
 
 using namespace Qt;
 
@@ -31,6 +39,7 @@ public:
 	int setComboxDefalutIndex(QComboBox *combox, const QString &str);
 	void setSerialParameters(void);
 	void setComboBoxList(void);
+	static void *work_thread_cb(void *arg);
 
 private slots:
 	void on_btnApplyConfig_clicked();
@@ -45,5 +54,6 @@ private:
 	Ui::Modbus *ui;
 	QSerialPort *serial;
 	QSettings *configFile;
+	pthread_t work_thread;
 };
 #endif // MODBUSTEST_H

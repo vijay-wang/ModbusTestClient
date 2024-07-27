@@ -5,6 +5,8 @@
 #include "unit-test.h"
 #include "modbus-tcp.h"
 #include "modbus-version.h"
+#include <unistd.h>
+#include <QMessageBox>
 
 int Modbus::setComboxDefalutIndex(QComboBox *combox, const QString &str)
 {
@@ -160,11 +162,15 @@ Modbus::Modbus(QWidget *parent)
 	setComboBoxList();
 
 	/* Set modbus protocol to radio button */
-	QString protocol = configFile->value(MODBUS_PROTOCOL"Protocol").toString();
+	QString protocol = configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
 	if (protocol == "RTU")
 		ui->radioButtonRtu->setChecked(true);
 	else if (protocol == "TCP")
 		ui->radioButtonTcp->setChecked(true);
+
+	/* Set default IP */
+	QString ip = configFile->value(IP_SECTION_NAME"IP").toString();
+	ui->lineEditIp->setText(ip);
 }
 
 Modbus::~Modbus()
@@ -176,42 +182,44 @@ Modbus::~Modbus()
 
 void Modbus::on_btnApplyConfig_clicked()
 {
-	QString strDataBit =ui->comboBoxDataBits->currentText();
-	QString strParit =ui->comboBoxParity->currentText();
-	QString strStopBit =ui->comboBoxStopBits->currentText();
-	QString strFlowControl =ui->comboBoxFlowControl->currentText();
-	QString strSpeed =ui->comboBoxSpeed->currentText();
-	qDebug() << "set DataBit:" << strDataBit;
-	qDebug() << "set Parit:" << strParit;
-	qDebug() << "set StopBits:" << strStopBit;
-	qDebug() << "set FlowControl:" << strFlowControl;
-	qDebug() << "set boadRate:" << strSpeed << endl;
+	QString strDataBit = ui->comboBoxDataBits->currentText();
+	QString strParit = ui->comboBoxParity->currentText();
+	QString strStopBit = ui->comboBoxStopBits->currentText();
+	QString strFlowControl = ui->comboBoxFlowControl->currentText();
+	QString strSpeed = ui->comboBoxSpeed->currentText();
+	QString strIp = ui->lineEditIp->text();
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"dataBits", strDataBit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"parity", strParit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"stopBits", strStopBit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"flowControl", strFlowControl);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"baudRate", strSpeed);
+	configFile->setValue(IP_SECTION_NAME"IP", strIp);
+	qDebug() << "set DataBit:" << strDataBit;
+	qDebug() << "set Parit:" << strParit;
+	qDebug() << "set StopBits:" << strStopBit;
+	qDebug() << "set FlowControl:" << strFlowControl;
+	qDebug() << "set boadRate:" << strSpeed << endl;
+	qDebug() << "set ip:" << strIp << endl;
 }
 
 #define BUG_REPORT(_cond, _format, _args...) \
-    printf(                                  \
+    qDebug(                                  \
 	"\nLine %d: assertion error for '%s': " _format "\n", __LINE__, #_cond, ##_args)
 
 #define ASSERT_TRUE(_cond, _format, __args...)    \
     {                                             \
 	if (_cond) {                              \
-	    printf("OK\n");                       \
+	    qDebug("OK\n");                       \
 	} else {                                  \
 	    BUG_REPORT(_cond, _format, ##__args); \
 	    goto close;                           \
 	}                                         \
     };
 
-void Modbus::on_btnStart_clicked()
-{
-	setSerialParameters();
 
-	modbus_new_rtu("COM4", 115200, 'N', 8, 1);
+void *Modbus::work_thread_cb(void *arg)
+{
+	class Modbus *pthis = (class Modbus *)arg;
 	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
 	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
 	uint8_t *tab_rp_bits = NULL;
@@ -233,36 +241,121 @@ void Modbus::on_btnStart_clicked()
 	int success = FALSE;
 	int old_slave;
 	char *ip_or_device;
+	unsigned short input_register_num = 128;
 
-	if (argc > 1) {
-		if (strcmp(argv[1], "tcp") == 0) {
-			use_backend = TCP;
-		} else if (strcmp(argv[1], "tcppi") == 0) {
-			use_backend = TCP_PI;
-		} else if (strcmp(argv[1], "rtu") == 0) {
-			use_backend = RTU;
-		} else {
-			printf("Modbus client for unit testing\n");
-			printf("Usage:\n  %s [tcp|tcppi|rtu]\n", argv[0]);
-			printf("Eg. tcp 127.0.0.1 or rtu /dev/ttyUSB1\n\n");
-			exit(1);
-		}
-	} else {
-		/* By default */
+	QString protocol = pthis->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
+	QString ip = pthis->ui->lineEditIp->text();
+	QString serialCom = pthis->ui->comboBoxPort->currentText();
+	if (protocol == "TCP") {
 		use_backend = TCP;
+		ip_or_device = ip.toLatin1().data();
+	} else if (protocol == "RTU") {
+		use_backend = RTU;
+		ip_or_device = serialCom.toLatin1().data();
+	} else {
+		return NULL;
 	}
 
-	//modbus_set_slave(ctx, 0x11);
-	//modbus_set_debug(ctx, true);
+	if (ip_or_device[0] == 0)
+		QMessageBox::warning(pthis, "Warning", "Device or ip cannot be null");
+	qDebug("device or ip is: %s\n", ip_or_device);
+
+	if (use_backend == TCP) {
+		ctx = modbus_new_tcp(ip_or_device, 1502);
+	} else if (use_backend == RTU) {
+		ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
+	}
+
+	if (ctx == NULL) {
+		qDebug() << "Unable to allocate libmodbus context\n" << endl;
+		return NULL;
+	}
+
+	//modbus_set_debug(ctx, TRUE);
+	modbus_set_error_recovery(
+	    ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
+
+	if (use_backend == RTU) {
+		modbus_set_slave(ctx, SERVER_ID);
+	}
+
+	modbus_get_response_timeout(ctx, &old_response_to_sec, &old_response_to_usec);
+	if (modbus_connect(ctx) == -1) {
+		qDebug("Connection failed: %s\n", modbus_strerror(errno));
+		modbus_free(ctx);
+		return NULL;
+	}
+
+	nb_points = input_register_num;
+	tab_rp_registers = (uint16_t *) malloc(nb_points * sizeof(uint16_t));
+	memset(tab_rp_registers, 0, nb_points * sizeof(uint16_t));
+
+	qDebug("** UNIT TESTING **\n");
+	qDebug("1/1 No response timeout modification on connect: ");
+	modbus_get_response_timeout(ctx, &new_response_to_sec, &new_response_to_usec);
+	ASSERT_TRUE(old_response_to_sec == new_response_to_sec &&
+			old_response_to_usec == new_response_to_usec,
+		    "");
+
+	while (1) {
+		usleep(1000 * 900);
+		static int read_num;
+		rc = modbus_read_input_registers(
+		    ctx, 0, 1, tab_rp_registers);
+		if (rc == -1) {
+			qDebug("read num failed\n");
+			continue;
+		}
+		read_num = tab_rp_registers[0];
+
+		usleep(1000 * 100);
+		rc = modbus_read_input_registers(
+		    ctx, 1, tab_rp_registers[0] * 4, tab_rp_registers);
+		if (rc == -1) {
+			qDebug("read data failed\n");
+			continue;
+		}
+		qDebug("==========================\n");
+		for (int i = 0; i < read_num; i++) {
+			if ((tab_rp_registers[i * 4] >> 8) == 1)
+				qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
+			else if ((tab_rp_registers[i * 4] >> 8) == 2)
+				qDebug("[R%d]\n", tab_rp_registers[i * 4] & 0x0f);
+			else if ((tab_rp_registers[i * 4] >> 8) == 3)
+				qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
+			else if ((tab_rp_registers[i * 4] >> 8) == 0xff)
+				qDebug("[full graph]\n");
+			qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
+			qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
+			qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
+		}
+	}
+
+close:
+	/* Free the memory */
+	free(tab_rp_bits);
+	free(tab_rp_registers);
+
+	/* Close the connection */
+	modbus_close(ctx);
+	modbus_free(ctx);
+
+	return NULL;
+}
+
+void Modbus::on_btnStart_clicked()
+{
+	setSerialParameters();
+	pthread_create(&work_thread, NULL, work_thread_cb, this);
 }
 
 void Modbus::on_radioButtonRtu_clicked()
 {
-	configFile->setValue(MODBUS_PROTOCOL"Protocol", "RTU");
+	configFile->setValue(MODBUS_PROTOCOL_SECTION_NAME"Protocol", "RTU");
 }
 
 void Modbus::on_radioButtonTcp_clicked()
 {
-	configFile->setValue(MODBUS_PROTOCOL"Protocol", "TCP");
+	configFile->setValue(MODBUS_PROTOCOL_SECTION_NAME"Protocol", "TCP");
 }
 
