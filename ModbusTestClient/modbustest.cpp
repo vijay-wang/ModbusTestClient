@@ -149,6 +149,7 @@ Modbus::Modbus(QWidget *parent)
     , ui(new Ui::Modbus)
 {
 	ui->setupUi(this);
+	status = STOP;
 
 	/* Set comboBox value list */
 	QList<QSerialPortInfo> list = QSerialPortInfo::availablePorts();
@@ -217,29 +218,29 @@ void Modbus::on_btnApplyConfig_clicked()
     };
 
 
+void Modbus::addLinemessage(QStringList list,int line)
+{
+	for(int i=0;i<list.size();i++)
+	{
+		model->setItem(line,i,new QStandardItem(list.at(i)));
+	}
+}
+
 void *Modbus::work_thread_cb(void *arg)
 {
 	class Modbus *pthis = (class Modbus *)arg;
 	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
 	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
-	uint8_t *tab_rp_bits = NULL;
 	uint16_t *tab_rp_registers = NULL;
-	uint16_t *tab_rp_registers_bad = NULL;
 	modbus_t *ctx = NULL;
 	int i;
-	uint8_t value;
 	int nb_points;
 	int rc;
-	float real;
 	uint32_t old_response_to_sec;
 	uint32_t old_response_to_usec;
 	uint32_t new_response_to_sec;
 	uint32_t new_response_to_usec;
-	uint32_t old_byte_to_sec;
-	uint32_t old_byte_to_usec;
 	int use_backend;
-	int success = FALSE;
-	int old_slave;
 	char *ip_or_device;
 	unsigned short input_register_num = 128;
 
@@ -290,6 +291,17 @@ void *Modbus::work_thread_cb(void *arg)
 	tab_rp_registers = (uint16_t *) malloc(nb_points * sizeof(uint16_t));
 	memset(tab_rp_registers, 0, nb_points * sizeof(uint16_t));
 
+	/* Set tab header */
+	pthis->model = new QStandardItemModel();
+	pthis->ui->tableView->setModel(pthis->model);
+	QStringList list;
+	list<< "num" << "min" << "avg" << "max";
+	for(int i=0;i<list.size();i++)
+	{
+		pthis->model->setHorizontalHeaderItem(i,new QStandardItem(list.at(i)));
+		pthis->ui->tableView->setColumnWidth(i,100);
+	}
+
 	qDebug("** UNIT TESTING **\n");
 	qDebug("1/1 No response timeout modification on connect: ");
 	modbus_get_response_timeout(ctx, &new_response_to_sec, &new_response_to_usec);
@@ -297,7 +309,8 @@ void *Modbus::work_thread_cb(void *arg)
 			old_response_to_usec == new_response_to_usec,
 		    "");
 
-	while (1) {
+
+	while (pthis->status == START) {
 		usleep(1000 * 900);
 		static int read_num;
 		rc = modbus_read_input_registers(
@@ -317,23 +330,37 @@ void *Modbus::work_thread_cb(void *arg)
 		}
 		qDebug("==========================\n");
 		for (int i = 0; i < read_num; i++) {
+		//for (int i = 0; i < 1; i++) {
+			QStringList list;
+			QString num;
+			QString min;
+			QString avg;
+			QString max;
 			if ((tab_rp_registers[i * 4] >> 8) == 1)
-				qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
+				num = QString("L%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+				//qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
 			else if ((tab_rp_registers[i * 4] >> 8) == 2)
-				qDebug("[R%d]\n", tab_rp_registers[i * 4] & 0x0f);
+				num = QString("R%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+				//qDebug("[R%d]\n", tab_rp_registers[i * 4] & 0x0f);
 			else if ((tab_rp_registers[i * 4] >> 8) == 3)
-				qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
+				num = QString("C%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+				//qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
 			else if ((tab_rp_registers[i * 4] >> 8) == 0xff)
-				qDebug("[full graph]\n");
-			qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
-			qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
-			qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
+				num = QString("full graph");
+				//qDebug("[full graph]\n");
+			min = QString("%1.%2").arg(tab_rp_registers[i * 4 + 1] / 10).arg(tab_rp_registers[i * 4 + 1] % 10);
+			avg = QString("%1.%2").arg(tab_rp_registers[i * 4 + 2] / 10).arg(tab_rp_registers[i * 4 + 2] % 10);
+			max = QString("%1.%2").arg(tab_rp_registers[i * 4 + 3] / 10).arg(tab_rp_registers[i * 4 + 3] % 10);
+			list << num << min << avg << max;
+			pthis->addLinemessage(list, i);
+			//qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
+			//qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
+			//qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
 		}
 	}
 
 close:
 	/* Free the memory */
-	free(tab_rp_bits);
 	free(tab_rp_registers);
 
 	/* Close the connection */
@@ -345,8 +372,10 @@ close:
 
 void Modbus::on_btnStart_clicked()
 {
-	setSerialParameters();
-	pthread_create(&work_thread, NULL, work_thread_cb, this);
+	status = (status == START) ? STOP:START;
+	(status == START) ? (ui->btnStart->setText("Stop"), (void)pthread_create(&work_thread, NULL, work_thread_cb, this)):ui->btnStart->setText("Start");
+	//setSerialParameters();
+
 }
 
 void Modbus::on_radioButtonRtu_clicked()
