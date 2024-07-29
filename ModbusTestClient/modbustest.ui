@@ -14,7 +14,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Modbus</string>
+   <string>ModbusClient</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QPushButton" name="btnApplyConfig">
@@ -148,7 +148,7 @@
      <rect>
       <x>310</x>
       <y>20</y>
-      <width>430</width>
+      <width>420</width>
       <height>560</height>
      </rect>
     </property>

@@ -12,7 +12,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS SerialPort)
-#find_package(modbus)
 
 set(PROJECT_SOURCES
         main.cpp
@@ -44,10 +43,10 @@ else()
     endif()
 endif()
 
-include_directories(C:/Users/ww107/Desktop/share/ModbusTestClient/ModbusTestClient/include)
+include_directories(${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ModbusTestClient PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 target_link_libraries(ModbusTestClient PRIVATE Qt6::SerialPort)
-target_link_libraries(ModbusTestClient PRIVATE C:/Users/ww107/Desktop/share/ModbusTestClient/ModbusTestClient/lib/libmodbus-5.dll)
+target_link_libraries(ModbusTestClient PRIVATE ${PROJECT_SOURCE_DIR}/lib/libmodbus-5.dll)
 
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

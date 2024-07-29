@@ -332,7 +332,7 @@ void *Modbus::work_thread_cb(void *arg)
 			qDebug("read data failed\n");
 			continue;
 		}
-		qDebug("==========================\n");
+		//qDebug("==========================\n");
 		for (int i = 0; i < read_num; i++) {
 		//for (int i = 0; i < 1; i++) {
 			QStringList list;

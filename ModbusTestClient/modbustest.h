@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QSettings>
+//#define QT_NO_DEBUG_OUTPUT
 #include <QDebug>
 #include <QSerialPort>
 #include <QSerialPortInfo>
@@ -12,7 +13,8 @@
 #include <QAbstractItemView>
 #include <pthread.h>
 
-#define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
+//#define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
+#define CONFIG_FILE "config.ini"
 #define DEFAULT_SERIAL_SECTION_NAME "/SerialConfig/"
 #define MODBUS_PROTOCOL_SECTION_NAME "/Protocol/"
 #define IP_SECTION_NAME "/IP/"
