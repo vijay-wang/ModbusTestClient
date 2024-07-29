@@ -149,7 +149,7 @@ Modbus::Modbus(QWidget *parent)
     , ui(new Ui::Modbus)
 {
 	ui->setupUi(this);
-	setFixedSize(779, 629);
+	//setFixedSize(779, 629);
 	status = STOP;
 
 	/* Set comboBox value list */
@@ -302,8 +302,10 @@ void *Modbus::work_thread_cb(void *arg)
 	for(int i=0;i<list.size();i++)
 	{
 		pthis->model->setHorizontalHeaderItem(i,new QStandardItem(list.at(i)));
-		pthis->ui->tableView->setColumnWidth(i,100);
+		//pthis->ui->tableView->setColumnWidth(i,100);
 	}
+	pthis->ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+	//pthis->ui->tableView->horizontalHeader()->setStretchLastSection(false);
 
 	qDebug("** UNIT TESTING **\n");
 	qDebug("1/1 No response timeout modification on connect: ");
@@ -315,7 +317,7 @@ void *Modbus::work_thread_cb(void *arg)
 
 	static int tmp_num;
 	while (pthis->status == START) {
-		usleep(1000 * 900);
+		usleep(1000 * 100);
 		static int read_num;
 		rc = modbus_read_input_registers(
 		    ctx, 0, 1, tab_rp_registers);
@@ -340,7 +342,9 @@ void *Modbus::work_thread_cb(void *arg)
 			QString min;
 			QString avg;
 			QString max;
-			if ((tab_rp_registers[i * 4] >> 8) == 1)
+			if ((tab_rp_registers[i * 4] >> 8) == 0) {
+				num = QString("P%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+			} else if ((tab_rp_registers[i * 4] >> 8) == 1)
 				num = QString("L%1").arg(tab_rp_registers[i * 4] & 0x00ff);
 				//qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
 			else if ((tab_rp_registers[i * 4] >> 8) == 2)
@@ -365,6 +369,7 @@ void *Modbus::work_thread_cb(void *arg)
 			//qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
 		}
 		tmp_num = read_num;
+		usleep(1000 * 700);
 	}
 
 close:
