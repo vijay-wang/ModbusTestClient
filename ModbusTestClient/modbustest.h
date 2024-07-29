@@ -9,6 +9,7 @@
 #include <QSettings>
 #include <QComboBox>
 #include <QStandardItemModel>
+#include <QAbstractItemView>
 #include <pthread.h>
 
 #define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"

@@ -149,6 +149,7 @@ Modbus::Modbus(QWidget *parent)
     , ui(new Ui::Modbus)
 {
 	ui->setupUi(this);
+	setFixedSize(779, 629);
 	status = STOP;
 
 	/* Set comboBox value list */
@@ -220,9 +221,10 @@ void Modbus::on_btnApplyConfig_clicked()
 
 void Modbus::addLinemessage(QStringList list,int line)
 {
-	for(int i=0;i<list.size();i++)
+	for(int i=0; i<list.size(); i++)
 	{
 		model->setItem(line,i,new QStandardItem(list.at(i)));
+		model->item(line, i)->setTextAlignment(Qt::AlignCenter);
 	}
 }
 
@@ -294,6 +296,7 @@ void *Modbus::work_thread_cb(void *arg)
 	/* Set tab header */
 	pthis->model = new QStandardItemModel();
 	pthis->ui->tableView->setModel(pthis->model);
+	pthis->ui->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 	QStringList list;
 	list<< "num" << "min" << "avg" << "max";
 	for(int i=0;i<list.size();i++)
@@ -310,6 +313,7 @@ void *Modbus::work_thread_cb(void *arg)
 		    "");
 
 
+	static int tmp_num;
 	while (pthis->status == START) {
 		usleep(1000 * 900);
 		static int read_num;
@@ -351,12 +355,16 @@ void *Modbus::work_thread_cb(void *arg)
 			min = QString("%1.%2").arg(tab_rp_registers[i * 4 + 1] / 10).arg(tab_rp_registers[i * 4 + 1] % 10);
 			avg = QString("%1.%2").arg(tab_rp_registers[i * 4 + 2] / 10).arg(tab_rp_registers[i * 4 + 2] % 10);
 			max = QString("%1.%2").arg(tab_rp_registers[i * 4 + 3] / 10).arg(tab_rp_registers[i * 4 + 3] % 10);
+			/* remove the surplus row */
+			if (tmp_num > read_num)
+				pthis->model->removeRows(read_num, tmp_num - read_num);
 			list << num << min << avg << max;
 			pthis->addLinemessage(list, i);
 			//qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
 			//qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
 			//qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
 		}
+		tmp_num = read_num;
 	}
 
 close:
