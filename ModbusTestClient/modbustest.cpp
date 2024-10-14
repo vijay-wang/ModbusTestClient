@@ -269,12 +269,18 @@ void *Modbus::work_thread_cb(void *arg)
 		ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
 	}
 
+	modbus_rtu_set_serial_mode(ctx, MODBUS_RTU_RS485);
+	modbus_rtu_set_rts(ctx, MODBUS_RTU_RTS_DOWN);
+	int delay = modbus_rtu_get_rts_delay(ctx);
+	int mode = modbus_rtu_get_serial_mode(ctx);
+	qDebug("delay:%d, mode:%d\n",delay, mode);
+
 	if (ctx == NULL) {
 		qDebug() << "Unable to allocate libmodbus context\n" << endl;
 		return NULL;
 	}
 
-	//modbus_set_debug(ctx, TRUE);
+	// modbus_set_debug(ctx, TRUE);
 	modbus_set_error_recovery(
 	    ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 
@@ -316,60 +322,56 @@ void *Modbus::work_thread_cb(void *arg)
 
 
 	static int tmp_num;
+	static int read_num = 17 * 4 + 1;
+	static int group = 0;
 	while (pthis->status == START) {
-		usleep(1000 * 100);
-		static int read_num;
-		rc = modbus_read_input_registers(
-		    ctx, 0, 1, tab_rp_registers);
-		if (rc == -1) {
-			qDebug("read num failed\n");
-			continue;
-		}
-		read_num = tab_rp_registers[0];
 
-		usleep(1000 * 100);
 		rc = modbus_read_input_registers(
-		    ctx, 1, tab_rp_registers[0] * 4, tab_rp_registers);
+		    ctx, 0, read_num, tab_rp_registers);
+
+		group = tab_rp_registers[0];
+		read_num = group * 4 + 1;
+
 		if (rc == -1) {
-			qDebug("read data failed\n");
+			printf("===============read data failed: %s==================\n",modbus_strerror(errno) );
 			continue;
 		}
 		//qDebug("==========================\n");
-		for (int i = 0; i < read_num; i++) {
+		for (int i = 0; i < group; i++) {
 		//for (int i = 0; i < 1; i++) {
 			QStringList list;
 			QString num;
 			QString min;
 			QString avg;
 			QString max;
-			if ((tab_rp_registers[i * 4] >> 8) == 0) {
-				num = QString("P%1").arg(tab_rp_registers[i * 4] & 0x00ff);
-			} else if ((tab_rp_registers[i * 4] >> 8) == 1)
-				num = QString("L%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+			if ((tab_rp_registers[i * 4 + 1] >> 8) == 0) {
+				num = QString("P%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
+			} else if ((tab_rp_registers[i * 4 + 1] >> 8) == 1)
+				num = QString("L%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
 				//qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4] >> 8) == 2)
-				num = QString("R%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 2)
+				num = QString("R%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
 				//qDebug("[R%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4] >> 8) == 3)
-				num = QString("C%1").arg(tab_rp_registers[i * 4] & 0x00ff);
+			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 3)
+				num = QString("C%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
 				//qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4] >> 8) == 0xff)
+			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 0xff)
 				num = QString("full graph");
 				//qDebug("[full graph]\n");
-			min = QString("%1.%2").arg(tab_rp_registers[i * 4 + 1] / 10).arg(tab_rp_registers[i * 4 + 1] % 10);
-			avg = QString("%1.%2").arg(tab_rp_registers[i * 4 + 2] / 10).arg(tab_rp_registers[i * 4 + 2] % 10);
-			max = QString("%1.%2").arg(tab_rp_registers[i * 4 + 3] / 10).arg(tab_rp_registers[i * 4 + 3] % 10);
+			min = QString("%1.%2").arg(tab_rp_registers[i * 4 + 1 + 1] / 10).arg(tab_rp_registers[i * 4 + 1 + 1] % 10);
+			avg = QString("%1.%2").arg(tab_rp_registers[i * 4 + 2 + 1] / 10).arg(tab_rp_registers[i * 4 + 2 + 1] % 10);
+			max = QString("%1.%2").arg(tab_rp_registers[i * 4 + 3 + 1] / 10).arg(tab_rp_registers[i * 4 + 3 + 1] % 10);
 			/* remove the surplus row */
-			if (tmp_num > read_num)
-				pthis->model->removeRows(read_num, tmp_num - read_num);
+			if (tmp_num > group)
+				pthis->model->removeRows(group, tmp_num - group);
 			list << num << min << avg << max;
 			pthis->addLinemessage(list, i);
 			//qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
 			//qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
 			//qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
 		}
-		tmp_num = read_num;
-		usleep(1000 * 700);
+		tmp_num = group;
+		usleep(1000 * 10);
 	}
 
 close:
