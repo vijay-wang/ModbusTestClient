@@ -60,7 +60,9 @@ private slots:
 
 	void on_radioButtonTcp_clicked();
 
-	void on_pushButton_clicked();
+	void on_btnScanID_clicked();
+
+	void on_btnModifyId_clicked();
 
 private:
 	Ui::Modbus *ui;
@@ -68,7 +70,8 @@ private:
 	QSettings *configFile;
 	pthread_t work_thread;
 	QStandardItemModel *model;
-	int scan_salve_id(int id);
+	int scanSalveId(int id);
+	int modifySalveId(int oldId, int newId);
 	int status;
 };
 #endif // MODBUSTEST_H
