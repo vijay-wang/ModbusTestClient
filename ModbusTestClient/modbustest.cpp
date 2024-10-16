@@ -144,6 +144,23 @@ void Modbus::setSerialParameters()
 	qDebug() << "baudRate:" << serial->baudRate() << endl;
 }
 
+static void toggleAllWidgetsInLayout(QLayout *layout, bool _switch) {
+	// 遍历布局中的所有项
+	for (int i = 0; i < layout->count(); ++i) {
+		QLayoutItem *item = layout->itemAt(i);
+
+		// 检查是否是 QWidget
+		if (QWidget *widget = item->widget()) {
+			widget->setEnabled(_switch);  // 禁用控件
+		}
+
+		// 检查是否是子布局
+		if (QLayout *childLayout = item->layout()) {
+			toggleAllWidgetsInLayout(childLayout, _switch);  // 递归禁用子布局中的控件
+		}
+	}
+}
+
 Modbus::Modbus(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::Modbus)
@@ -165,14 +182,22 @@ Modbus::Modbus(QWidget *parent)
 
 	/* Set modbus protocol to radio button */
 	QString protocol = configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
-	if (protocol == "RTU")
+	if (protocol == "RTU") {
 		ui->radioButtonRtu->setChecked(true);
-	else if (protocol == "TCP")
+		toggleAllWidgetsInLayout(ui->vLayoutRTU, true);
+		toggleAllWidgetsInLayout(ui->vLayoutIP, false);
+	} else if (protocol == "TCP") {
 		ui->radioButtonTcp->setChecked(true);
+		toggleAllWidgetsInLayout(ui->vLayoutRTU, false);
+		toggleAllWidgetsInLayout(ui->vLayoutIP, true);
+	}
 
 	/* Set default IP */
 	QString ip = configFile->value(IP_SECTION_NAME"IP").toString();
 	ui->lineEditIp->setText(ip);
+
+	ui->lineEditOldId->setFixedWidth(55);
+	ui->lineEditNewId->setFixedWidth(55);
 }
 
 Modbus::~Modbus()
@@ -234,7 +259,8 @@ void *Modbus::work_thread_cb(void *arg)
 	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
 	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
 	uint16_t *tab_rp_registers = NULL;
-	modbus_t *ctx = NULL;
+	pthis->ctx = NULL;
+	// modbus_t *ctx = NULL;
 	int i;
 	int nb_points;
 	int rc;
@@ -245,6 +271,9 @@ void *Modbus::work_thread_cb(void *arg)
 	int use_backend;
 	char *ip_or_device;
 	unsigned short input_register_num = 128;
+	int tmp_num;
+	int read_num = 17 * 4 + 1;
+	int group = 0;
 
 	QString protocol = pthis->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
 	QString ip = pthis->ui->lineEditIp->text();
@@ -264,34 +293,30 @@ void *Modbus::work_thread_cb(void *arg)
 	qDebug("device or ip is: %s\n", ip_or_device);
 
 	if (use_backend == TCP) {
-		ctx = modbus_new_tcp(ip_or_device, 1502);
+		pthis->ctx = modbus_new_tcp(ip_or_device, 1502);
 	} else if (use_backend == RTU) {
-		ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
+		pthis->ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
+		if (pthis->ctx == NULL) {
+			qDebug() << "Unable to allocate libmodbus context\n" << endl;
+			return NULL;
+		}
+		modbus_rtu_set_serial_mode(pthis->ctx, MODBUS_RTU_RS485);
+		modbus_rtu_set_rts(pthis->ctx, MODBUS_RTU_RTS_DOWN);
 	}
 
-	modbus_rtu_set_serial_mode(ctx, MODBUS_RTU_RS485);
-	modbus_rtu_set_rts(ctx, MODBUS_RTU_RTS_DOWN);
-	int delay = modbus_rtu_get_rts_delay(ctx);
-	int mode = modbus_rtu_get_serial_mode(ctx);
-	qDebug("delay:%d, mode:%d\n",delay, mode);
-
-	if (ctx == NULL) {
-		qDebug() << "Unable to allocate libmodbus context\n" << endl;
-		return NULL;
-	}
 
 	// modbus_set_debug(ctx, TRUE);
 	modbus_set_error_recovery(
-	    ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
+	    pthis->ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 
 	if (use_backend == RTU) {
-		modbus_set_slave(ctx, SERVER_ID);
+		modbus_set_slave(pthis->ctx, pthis->idToDisplay);
 	}
 
-	modbus_get_response_timeout(ctx, &old_response_to_sec, &old_response_to_usec);
-	if (modbus_connect(ctx) == -1) {
+	modbus_get_response_timeout(pthis->ctx, &old_response_to_sec, &old_response_to_usec);
+	if (modbus_connect(pthis->ctx) == -1) {
 		qDebug("Connection failed: %s\n", modbus_strerror(errno));
-		modbus_free(ctx);
+		modbus_free(pthis->ctx);
 		return NULL;
 	}
 
@@ -315,19 +340,16 @@ void *Modbus::work_thread_cb(void *arg)
 
 	qDebug("** UNIT TESTING **\n");
 	qDebug("1/1 No response timeout modification on connect: ");
-	modbus_get_response_timeout(ctx, &new_response_to_sec, &new_response_to_usec);
+	modbus_get_response_timeout(pthis->ctx, &new_response_to_sec, &new_response_to_usec);
 	ASSERT_TRUE(old_response_to_sec == new_response_to_sec &&
 			old_response_to_usec == new_response_to_usec,
 		    "");
 
 
-	static int tmp_num;
-	static int read_num = 17 * 4 + 1;
-	static int group = 0;
 	while (pthis->status == START) {
 
 		rc = modbus_read_input_registers(
-		    ctx, 0, read_num, tab_rp_registers);
+		    pthis->ctx, 0, read_num, tab_rp_registers);
 
 		group = tab_rp_registers[0];
 		read_num = group * 4 + 1;
@@ -336,9 +358,7 @@ void *Modbus::work_thread_cb(void *arg)
 			printf("===============read data failed: %s==================\n",modbus_strerror(errno) );
 			continue;
 		}
-		//qDebug("==========================\n");
 		for (int i = 0; i < group; i++) {
-		//for (int i = 0; i < 1; i++) {
 			QStringList list;
 			QString num;
 			QString min;
@@ -366,12 +386,9 @@ void *Modbus::work_thread_cb(void *arg)
 				pthis->model->removeRows(group, tmp_num - group);
 			list << num << min << avg << max;
 			pthis->addLinemessage(list, i);
-			//qDebug("min: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 1] / 10, tab_rp_registers[i * 4 + 1] % 10);
-			//qDebug("avg: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 2] / 10, tab_rp_registers[i * 4 + 2] % 10);
-			//qDebug("max: %d.%d degrees Celsius\n", tab_rp_registers[i * 4 + 3] / 10, tab_rp_registers[i * 4 + 3] % 10);
 		}
 		tmp_num = group;
-		usleep(1000 * 10);
+		usleep(1000 * pthis->refTime);
 	}
 
 close:
@@ -379,27 +396,200 @@ close:
 	free(tab_rp_registers);
 
 	/* Close the connection */
-	modbus_close(ctx);
-	modbus_free(ctx);
+	modbus_close(pthis->ctx);
+	modbus_free(pthis->ctx);
 
 	return NULL;
 }
 
 void Modbus::on_btnStart_clicked()
 {
-	status = (status == START) ? STOP:START;
-	(status == START) ? (ui->btnStart->setText("Stop"), (void)pthread_create(&work_thread, NULL, work_thread_cb, this)):ui->btnStart->setText("Start");
-	//setSerialParameters();
+	if (idToDisplay == 0) {
+		QMessageBox::warning(this, "Warning", "Please input ID, the ID must be \n less than 248 and greater than 0");
+		return;
+	}
 
+	status = (status == START) ? STOP:START;
+	(status == START) ?
+		ui->btnStart->setText("Stop"),
+		ui->radioButtonRtu->setEnabled(false),
+		ui->radioButtonTcp->setEnabled(false),
+		(void)pthread_create(&work_thread, NULL, work_thread_cb, this):
+	(ui->btnStart->setText("Start"),
+	ui->radioButtonRtu->setEnabled(true),
+	ui->radioButtonTcp->setEnabled(true));
+	setSerialParameters();
 }
 
 void Modbus::on_radioButtonRtu_clicked()
 {
 	configFile->setValue(MODBUS_PROTOCOL_SECTION_NAME"Protocol", "RTU");
+	toggleAllWidgetsInLayout(ui->vLayoutRTU, true);
+	toggleAllWidgetsInLayout(ui->vLayoutIP, false);
 }
 
 void Modbus::on_radioButtonTcp_clicked()
 {
 	configFile->setValue(MODBUS_PROTOCOL_SECTION_NAME"Protocol", "TCP");
+	toggleAllWidgetsInLayout(ui->vLayoutRTU, false);
+	toggleAllWidgetsInLayout(ui->vLayoutIP, true);
+}
+
+int read_slave_id(modbus_t *ctx, uint16_t *tab_rp_registers)
+{
+	return modbus_read_registers( ctx, 0, 1, tab_rp_registers);
+}
+
+/* The function shall return the number of salves scaned. Otherwise it shall return -1 on no Slave */
+int cb_scan_id(modbus_t *ctx, uint16_t *tab_rp_registers, void *data, void *out)
+{
+	uint8_t *idNum = (uint8_t *)out; *idNum = 0;
+	uint8_t *idSet = (uint8_t *)data;
+	for (int i = SLAVE_ID_MIN; i <= SLAVE_ID_MAX; ++i) {
+		modbus_set_slave(ctx, i);
+		if (read_slave_id(ctx, &tab_rp_registers[0]) > 0) {
+			idSet[*idNum] = tab_rp_registers[0];
+			(*idNum)++;
+		}
+	}
+	return *idNum;
+}
+
+int cb_modify_id(modbus_t *ctx, uint16_t *tab_rp_registers, void *data, void * out)
+{
+	return modbus_write_register(ctx, 0, *(uint16_t *)data);
+}
+
+/* The return code is up to cb function exceipt -100, the -100 is a common failed code */
+int Modbus::worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, void *data, void *out), void *data, void *out)
+{
+	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
+	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
+	uint16_t *tab_rp_registers = NULL;
+	modbus_t *ctx = NULL;
+	int i;
+	int nb_points;
+	int rc;
+	uint32_t old_response_to_sec;
+	uint32_t old_response_to_usec;
+	uint32_t new_response_to_sec;
+	uint32_t new_response_to_usec;
+	int use_backend;
+	char *ip_or_device;
+	unsigned short input_register_num = 128;
+	int tmp_num;
+	int read_num = 17 * 4 + 1;
+	int group = 0;
+
+	QString protocol = this->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
+	QString serialCom = this->ui->comboBoxPort->currentText();
+	if (protocol == "TCP") {
+		QMessageBox::warning(this, "Warning", "Please select RTU protocol rather than TCP");
+		return -100;
+	} else if (protocol == "RTU") {
+		ip_or_device = serialCom.toLatin1().data();
+	} else {
+		QMessageBox::warning(this, "Warning", "Unkown protocl");
+		return -100;
+	}
+
+	if (ip_or_device[0] == 0)
+		QMessageBox::warning(this, "Warning", "Device or ip cannot be null");
+	qDebug("device or ip is: %s\n", ip_or_device);
+
+	ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
+	if (ctx == NULL) {
+		qDebug() << "Unable to allocate libmodbus context\n" << endl;
+		modbus_free(ctx);
+		return -100;
+	}
+	modbus_rtu_set_serial_mode(ctx, MODBUS_RTU_RS485);
+	modbus_rtu_set_rts(ctx, MODBUS_RTU_RTS_DOWN);
+	modbus_set_response_timeout(ctx, 0, SCAN_ID_TIMOUT);
+
+	// modbus_set_debug(ctx, TRUE);
+	modbus_set_error_recovery(
+	    ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
+
+	modbus_get_response_timeout(ctx, &old_response_to_sec, &old_response_to_usec);
+	if (modbus_connect(ctx) == -1) {
+		qDebug("Connection failed: %s\n", modbus_strerror(errno));
+		rc = -100;
+		goto free_modbus;
+	}
+	modbus_set_slave(ctx, id);
+
+	nb_points = input_register_num;
+	tab_rp_registers = (uint16_t *) malloc(nb_points * sizeof(uint16_t));
+	memset(tab_rp_registers, 0, nb_points * sizeof(uint16_t));
+
+	qDebug("** Modify slave id **\n");
+	qDebug("No response timeout modification on connect: ");
+	modbus_get_response_timeout(ctx, &new_response_to_sec, &new_response_to_usec);
+	ASSERT_TRUE(old_response_to_sec == new_response_to_sec &&
+			old_response_to_usec == new_response_to_usec,
+		    "");
+	qDebug("Response time: %ds, %dus\n", new_response_to_sec, new_response_to_usec);
+
+	rc = cb(ctx, tab_rp_registers, data, out);
+
+close:
+	/* Free the memory */
+	free(tab_rp_registers);
+free_modbus:
+	/* Close the connection */
+	modbus_close(ctx);
+	modbus_free(ctx);
+	return rc;
+}
+
+void Modbus::on_btnModifyId_clicked()
+{
+	int oldId = ui->lineEditOldId->text().toInt();
+	int newId = ui->lineEditNewId->text().toInt();
+	int ret = worker(oldId, cb_modify_id, &newId, NULL);
+
+	ret < 0 ?
+		(ret == -100 ?
+		QMessageBox::warning(this, "Warning", "Open serial failed")
+		: QMessageBox::warning(this, "Warning", "Modify slave ID failed"))
+	: QMessageBox::information(this, "Info", "Modify slave ID successfully");
+}
+
+void Modbus::on_btnScanID_clicked()
+{
+	char ids[512] = { 0 };
+	uint8_t idNum = 0;
+	uint8_t idSet[SLAVE_ID_MAX - SLAVE_ID_MIN] = { 0 };
+	int ret = worker(SLAVE_ID_MIN, cb_scan_id, idSet, &idNum);
+
+
+	if (ret == -100)
+		QMessageBox::warning(this, "Warning", "Open serial failed");
+	else {
+		for (int i = 0; i < idNum; i++)
+			sprintf(ids + i * 5, "[%3d]", idSet[i]);
+		QMessageBox::information(this, "Info", ids);
+		qDebug("Found id: %s", ids);
+	}
+}
+
+void Modbus::on_btnSetRefTime_clicked()
+{
+	refTime = ui->lineEditInterval->text().toInt();
+}
+
+
+void Modbus::on_btnIdToDisplay_clicked()
+{
+	int id = ui->lineEditIdToDisplay->text().toInt();
+	if (id == 0)
+		QMessageBox::warning(this, "Warning", "Please select which device to display\n Input device ID");
+	if (id < 1 || id > 247)
+		QMessageBox::warning(this, "Warning", "ID must be less than 248 and greater than 0");
+	else {
+		idToDisplay = id;
+		modbus_set_slave(ctx, idToDisplay);
+	}
 }
 
