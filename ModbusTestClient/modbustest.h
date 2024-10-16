@@ -13,8 +13,8 @@
 #include <QAbstractItemView>
 #include <pthread.h>
 
-//#define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
-#define CONFIG_FILE "config.ini"
+#define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
+//#define CONFIG_FILE "config.ini"
 #define DEFAULT_SERIAL_SECTION_NAME "/SerialConfig/"
 #define MODBUS_PROTOCOL_SECTION_NAME "/Protocol/"
 #define IP_SECTION_NAME "/IP/"
@@ -60,12 +60,15 @@ private slots:
 
 	void on_radioButtonTcp_clicked();
 
+	void on_pushButton_clicked();
+
 private:
 	Ui::Modbus *ui;
 	QSerialPort *serial;
 	QSettings *configFile;
 	pthread_t work_thread;
 	QStandardItemModel *model;
+	int scan_salve_id(int id);
 	int status;
 };
 #endif // MODBUSTEST_H
