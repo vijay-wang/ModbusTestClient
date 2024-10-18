@@ -355,7 +355,7 @@ void *Modbus::work_thread_cb(void *arg)
 		read_num = group * 4 + 1;
 
 		if (rc == -1) {
-			printf("===============read data failed: %s==================\n",modbus_strerror(errno) );
+			qDebug("===============read data failed: %s==================\n",modbus_strerror(errno) );
 			continue;
 		}
 		for (int i = 0; i < group; i++) {
