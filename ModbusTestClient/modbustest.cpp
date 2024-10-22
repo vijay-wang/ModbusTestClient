@@ -255,6 +255,8 @@ void Modbus::addLinemessage(QStringList list,int line)
 
 void *Modbus::work_thread_cb(void *arg)
 {
+	setbuf(stdout, nullptr);
+	setbuf(stdin, nullptr);
 	class Modbus *pthis = (class Modbus *)arg;
 	/* Length of report slave ID response slave ID + ON/OFF + 'LMB' + version */
 	const int NB_REPORT_SLAVE_ID = 2 + 3 + strlen(LIBMODBUS_VERSION_STRING);
@@ -305,7 +307,7 @@ void *Modbus::work_thread_cb(void *arg)
 	}
 
 
-	// modbus_set_debug(ctx, TRUE);
+	modbus_set_debug(pthis->ctx, TRUE);
 	modbus_set_error_recovery(
 	    pthis->ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 

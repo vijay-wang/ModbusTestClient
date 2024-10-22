@@ -14,8 +14,11 @@
 #include <pthread.h>
 #include <modbus.h>
 
+#ifdef QT_DEBUG
 #define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
-//#define CONFIG_FILE "config.ini"
+#else
+#define CONFIG_FILE "config.ini"
+#endif
 #define DEFAULT_SERIAL_SECTION_NAME "/SerialConfig/"
 #define MODBUS_PROTOCOL_SECTION_NAME "/Protocol/"
 #define IP_SECTION_NAME "/IP/"
