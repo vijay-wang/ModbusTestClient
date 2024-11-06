@@ -169,15 +169,18 @@ Modbus::Modbus(QWidget *parent)
 	//setFixedSize(779, 629);
 	status = STOP;
 
+	serial = new QSerialPort;
+	configFile = new QSettings(CONFIG_FILE, QSettings::IniFormat);
+
 	/* Set comboBox value list */
 	QList<QSerialPortInfo> list = QSerialPortInfo::availablePorts();
 	for(int i = 0; i < list.size(); i++) {
 		ui->comboBoxPort->addItem(list.at(i).portName());
+		if(list.at(i).portName() == configFile->value(DEFAULT_SERIAL_SECTION_NAME"port").toString())
+			setComboxDefalutIndex(ui->comboBoxPort, list.at(i).portName());
 	}
 
 	/* Read config files and set defaut parameters for serial */
-	serial = new QSerialPort;
-	configFile = new QSettings(CONFIG_FILE, QSettings::IniFormat);
 	setComboBoxList();
 
 	/* Set modbus protocol to radio button */
@@ -198,6 +201,9 @@ Modbus::Modbus(QWidget *parent)
 
 	ui->lineEditOldId->setFixedWidth(55);
 	ui->lineEditNewId->setFixedWidth(55);
+
+	ui->lineEditInterval->setText(configFile->value(MISC_SECTION_NAME"refresh_interval").toString());
+	ui->lineEditIdToDisplay->setText(configFile->value(SLAVE_SECTION_NAME"id").toString());
 }
 
 Modbus::~Modbus()
@@ -214,12 +220,14 @@ void Modbus::on_btnApplyConfig_clicked()
 	QString strStopBit = ui->comboBoxStopBits->currentText();
 	QString strFlowControl = ui->comboBoxFlowControl->currentText();
 	QString strSpeed = ui->comboBoxSpeed->currentText();
+	QString port = ui->comboBoxPort->currentText();
 	QString strIp = ui->lineEditIp->text();
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"dataBits", strDataBit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"parity", strParit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"stopBits", strStopBit);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"flowControl", strFlowControl);
 	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"baudRate", strSpeed);
+	configFile->setValue(DEFAULT_SERIAL_SECTION_NAME"port", port);
 	configFile->setValue(IP_SECTION_NAME"IP", strIp);
 	qDebug() << "set DataBit:" << strDataBit;
 	qDebug() << "set Parit:" << strParit;
@@ -251,6 +259,43 @@ void Modbus::addLinemessage(QStringList list,int line)
 		model->setItem(line,i,new QStandardItem(list.at(i)));
 		model->item(line, i)->setTextAlignment(Qt::AlignCenter);
 	}
+}
+
+int is_valid_ip(const char *ip) {
+	// Check for null pointer
+	if (ip == NULL) {
+		return 0;
+	}
+
+	// Copy of the IP to avoid modifying the original string
+	char ip_copy[16];
+	strncpy(ip_copy, ip, sizeof(ip_copy) - 1);
+	ip_copy[sizeof(ip_copy) - 1] = '\0';
+
+	int segments = 0;  // Segment count
+	char *token = strtok(ip_copy, ".");  // Split by dot
+
+	while (token != NULL) {
+		// Check if the segment is a number
+		for (int i = 0; token[i]; i++) {
+			if (!isdigit((unsigned char) token[i])) {
+				return 0;
+			}
+		}
+
+		// Convert segment to integer
+		int num = atoi(token);
+		if (num < 0 || num > 255) {
+			return 0;
+		}
+
+		// Move to the next segment
+		segments++;
+		token = strtok(NULL, ".");
+	}
+
+	// A valid IPv4 address has exactly 4 segments
+	return segments == 4;
 }
 
 void *Modbus::work_thread_cb(void *arg)
@@ -297,7 +342,8 @@ void *Modbus::work_thread_cb(void *arg)
 	if (use_backend == TCP) {
 		pthis->ctx = modbus_new_tcp(ip_or_device, 1502);
 	} else if (use_backend == RTU) {
-		pthis->ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
+		int baudRate = pthis->ui->comboBoxSpeed->currentText().toInt();
+		pthis->ctx = modbus_new_rtu(ip_or_device, baudRate, 'N', 8, 1);
 		if (pthis->ctx == NULL) {
 			qDebug() << "Unable to allocate libmodbus context\n" << endl;
 			return NULL;
@@ -307,7 +353,7 @@ void *Modbus::work_thread_cb(void *arg)
 	}
 
 
-	modbus_set_debug(pthis->ctx, TRUE);
+	// modbus_set_debug(pthis->ctx, TRUE);
 	modbus_set_error_recovery(
 	    pthis->ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 
@@ -347,6 +393,7 @@ void *Modbus::work_thread_cb(void *arg)
 			old_response_to_usec == new_response_to_usec,
 		    "");
 
+	modbus_set_response_timeout(pthis->ctx, 0, 100 * 1000);
 
 	while (pthis->status == START) {
 
@@ -406,9 +453,23 @@ close:
 
 void Modbus::on_btnStart_clicked()
 {
-	if (idToDisplay == 0) {
-		QMessageBox::warning(this, "Warning", "Please input ID, the ID must be \n less than 248 and greater than 0");
-		return;
+	QString protocol = this->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
+	idToDisplay = this->configFile->value(SLAVE_SECTION_NAME"id").toInt();
+	refTime = this->configFile->value(MISC_SECTION_NAME"refresh_interval").toInt();
+
+	if (protocol == "RTU") {
+		if (idToDisplay < 1 || idToDisplay > 247) {
+			QMessageBox::warning(this, "Warning", "Please input ID, the ID must be \n less than 248 and greater than 0");
+			return;
+		}
+	}
+
+	QString ip = this->ui->lineEditIp->text();
+	if (protocol == "TCP") {
+		if (!is_valid_ip(ip.toUtf8().constData())) {
+			QMessageBox::warning(this, "Warning", "Ip is illegal");
+			return;
+		}
 	}
 
 	status = (status == START) ? STOP:START;
@@ -509,7 +570,7 @@ int Modbus::worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, 
 	modbus_rtu_set_rts(ctx, MODBUS_RTU_RTS_DOWN);
 	modbus_set_response_timeout(ctx, 0, SCAN_ID_TIMOUT);
 
-	// modbus_set_debug(ctx, TRUE);
+	modbus_set_debug(ctx, TRUE);
 	modbus_set_error_recovery(
 	    ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 
@@ -579,6 +640,7 @@ void Modbus::on_btnScanID_clicked()
 void Modbus::on_btnSetRefTime_clicked()
 {
 	refTime = ui->lineEditInterval->text().toInt();
+	configFile->setValue(MISC_SECTION_NAME"refresh_interval", refTime);
 }
 
 
@@ -593,5 +655,7 @@ void Modbus::on_btnIdToDisplay_clicked()
 		idToDisplay = id;
 		modbus_set_slave(ctx, idToDisplay);
 	}
+
+	configFile->setValue(SLAVE_SECTION_NAME"id", id);
 }
 

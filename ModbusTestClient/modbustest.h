@@ -15,13 +15,15 @@
 #include <modbus.h>
 
 #ifdef QT_DEBUG
-#define CONFIG_FILE "C:\\Users\\ww107\\Desktop\\share\\ModbusTestClient\\ModbusTestClient\\config.ini"
+#define CONFIG_FILE "config.ini"
 #else
 #define CONFIG_FILE "config.ini"
 #endif
 #define DEFAULT_SERIAL_SECTION_NAME "/SerialConfig/"
 #define MODBUS_PROTOCOL_SECTION_NAME "/Protocol/"
 #define IP_SECTION_NAME "/IP/"
+#define SLAVE_SECTION_NAME "/SLAVE/"
+#define MISC_SECTION_NAME "/MISC/"
 #define SLAVE_ID_MIN 1
 #define SLAVE_ID_MAX 247
 #define SCAN_ID_TIMOUT 30000 //us
