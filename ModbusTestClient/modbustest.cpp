@@ -55,8 +55,8 @@ void Modbus::setComboBoxList(void)
 	setComboxDefalutIndex(ui->comboBoxFlowControl,flowControl );
 
 	// Set speed list
-	QString speedList[] = {"1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "460800", "921600", "230400"};
-	for (int i = 0; i < 11; ++i) {
+	QString speedList[] = {"600", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "460800", "921600", "230400"};
+	for (int i = 0; i < 12; ++i) {
 		ui->comboBoxSpeed->addItem(speedList[i]);
 	}
 	QString baudRate = configFile->value(DEFAULT_SERIAL_SECTION_NAME"baudRate").toString();
@@ -321,6 +321,12 @@ void *Modbus::work_thread_cb(void *arg)
 	int tmp_num;
 	int read_num = 17 * 4 + 1;
 	int group = 0;
+	int baudRate;
+	int baudRates[] = {115200, 57600, 38400, 19200, 9600, 4800, 2400, 1200, 600};
+	int intervals[9]; // us
+
+	for (int i = 0; i < 9; ++i)
+		intervals[i] = 3625 * 2^i + 20000;
 
 	QString protocol = pthis->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
 	QString ip = pthis->ui->lineEditIp->text();
@@ -342,7 +348,7 @@ void *Modbus::work_thread_cb(void *arg)
 	if (use_backend == TCP) {
 		pthis->ctx = modbus_new_tcp(ip_or_device, 1502);
 	} else if (use_backend == RTU) {
-		int baudRate = pthis->ui->comboBoxSpeed->currentText().toInt();
+		baudRate = pthis->ui->comboBoxSpeed->currentText().toInt();
 		pthis->ctx = modbus_new_rtu(ip_or_device, baudRate, 'N', 8, 1);
 		if (pthis->ctx == NULL) {
 			qDebug() << "Unable to allocate libmodbus context\n" << endl;
@@ -393,7 +399,10 @@ void *Modbus::work_thread_cb(void *arg)
 			old_response_to_usec == new_response_to_usec,
 		    "");
 
-	modbus_set_response_timeout(pthis->ctx, 0, 100 * 1000);
+	for (int i = 0; i < 9; ++i) {
+		if (baudRate == baudRates[i])
+			modbus_set_response_timeout(pthis->ctx, 0, baudRates[i]);
+	}
 
 	while (pthis->status == START) {
 
