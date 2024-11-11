@@ -326,7 +326,7 @@ void *Modbus::work_thread_cb(void *arg)
 	int intervals[9]; // us
 
 	for (int i = 0; i < 9; ++i)
-		intervals[i] = 3625 * 2^i + 20000;
+		intervals[i] = 3625 * (1 << i) + 20000;
 
 	QString protocol = pthis->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
 	QString ip = pthis->ui->lineEditIp->text();
@@ -400,9 +400,12 @@ void *Modbus::work_thread_cb(void *arg)
 		    "");
 
 	for (int i = 0; i < 9; ++i) {
-		if (baudRate == baudRates[i])
-			modbus_set_response_timeout(pthis->ctx, 0, baudRates[i]);
+		if (baudRate == baudRates[i]) {
+			modbus_set_response_timeout(pthis->ctx, 0, intervals[i]);
+			qDebug("timeout:%d\n", intervals[i]);
+		}
 	}
+	//modbus_set_response_timeout(pthis->ctx, 0, 70000);
 
 	while (pthis->status == START) {
 
