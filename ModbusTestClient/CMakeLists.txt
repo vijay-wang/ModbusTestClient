@@ -73,3 +73,9 @@ install(TARGETS ModbusTestClient
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(ModbusTestClient)
 endif()
+
+if(MSVC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:CONSOLE")
+elseif(MINGW)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -mconsole")
+endif()

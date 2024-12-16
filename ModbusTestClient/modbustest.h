@@ -91,6 +91,7 @@ private:
 	int refTime = 1000; // ms
 	int idToDisplay = 0;
 	modbus_t *ctx = NULL;
+	float errorRate = 0.0;
 
 };
 #endif // MODBUSTEST_H

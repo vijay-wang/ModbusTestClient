@@ -324,6 +324,11 @@ void *Modbus::work_thread_cb(void *arg)
 	int baudRate;
 	int baudRates[] = {115200, 57600, 38400, 19200, 9600, 4800, 2400, 1200, 600};
 	int intervals[9]; // us
+	float queryNum = 0;
+	float errorNum = 0;
+	pthis->errorRate = 0;
+	pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
+	pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
 
 	for (int i = 0; i < 9; ++i)
 		intervals[i] = 3625 * (1 << i) + 20000;
@@ -359,7 +364,7 @@ void *Modbus::work_thread_cb(void *arg)
 	}
 
 
-	// modbus_set_debug(pthis->ctx, TRUE);
+	modbus_set_debug(pthis->ctx, TRUE);
 	modbus_set_error_recovery(
 	    pthis->ctx, (modbus_error_recovery_mode)(MODBUS_ERROR_RECOVERY_LINK | MODBUS_ERROR_RECOVERY_PROTOCOL));
 
@@ -408,7 +413,8 @@ void *Modbus::work_thread_cb(void *arg)
 	//modbus_set_response_timeout(pthis->ctx, 0, 70000);
 
 	while (pthis->status == START) {
-
+		queryNum++;
+		pthis->ui->lineEditQueryNum->setText(QString::number(queryNum));
 		rc = modbus_read_input_registers(
 		    pthis->ctx, 0, read_num, tab_rp_registers);
 
@@ -416,9 +422,15 @@ void *Modbus::work_thread_cb(void *arg)
 		read_num = group * 4 + 1;
 
 		if (rc == -1) {
+			errorNum++;
+			pthis->errorRate = errorNum / queryNum;
+			pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
+			pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
 			qDebug("===============read data failed: %s==================\n",modbus_strerror(errno) );
+			usleep(1000 * pthis->refTime);
 			continue;
 		}
+
 		for (int i = 0; i < group; i++) {
 			QStringList list;
 			QString num;
