@@ -451,9 +451,9 @@ void *Modbus::work_thread_cb(void *arg)
 			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 0xff)
 				num = QString("full graph");
 				//qDebug("[full graph]\n");
-			min = QString("%1.%2").arg(tab_rp_registers[i * 4 + 1 + 1] / 10).arg(tab_rp_registers[i * 4 + 1 + 1] % 10);
-			avg = QString("%1.%2").arg(tab_rp_registers[i * 4 + 2 + 1] / 10).arg(tab_rp_registers[i * 4 + 2 + 1] % 10);
-			max = QString("%1.%2").arg(tab_rp_registers[i * 4 + 3 + 1] / 10).arg(tab_rp_registers[i * 4 + 3 + 1] % 10);
+			min = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 1 + 1] / 10).arg(tab_rp_registers[i * 4 + 1 + 1] % 10);
+			avg = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 2 + 1] / 10).arg(tab_rp_registers[i * 4 + 2 + 1] % 10);
+			max = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 3 + 1] / 10).arg(tab_rp_registers[i * 4 + 3 + 1] % 10);
 			/* remove the surplus row */
 			if (tmp_num > group)
 				pthis->model->removeRows(group, tmp_num - group);
