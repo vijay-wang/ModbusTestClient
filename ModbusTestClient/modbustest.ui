@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>1122</width>
-    <height>696</height>
+    <height>838</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -636,6 +636,42 @@
          </layout>
         </item>
         <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_9">
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <item>
+           <spacer name="horizontalSpacer_8">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox">
+            <property name="text">
+             <string>additional data</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
          <layout class="QHBoxLayout" name="horizontalLayout_7">
           <property name="leftMargin">
            <number>4</number>
@@ -780,7 +816,7 @@
      <x>0</x>
      <y>0</y>
      <width>1122</width>
-     <height>21</height>
+     <height>25</height>
     </rect>
    </property>
   </widget>

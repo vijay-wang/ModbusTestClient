@@ -298,6 +298,17 @@ int is_valid_ip(const char *ip) {
 	return segments == 4;
 }
 
+typedef enum {
+#define ADDITIONAL_REG_BASE 1000
+#define ADDITIONAL_REGs_PER_TOOL 20
+	ADDITIONAL_REG_TEMP_TYPE_OFFSET,
+	ADDITIONAL_REG_TEMP_MINx_OFFSET,
+	ADDITIONAL_REG_TEMP_MINy_OFFSET,
+	ADDITIONAL_REG_TEMP_MAXx_OFFSET,
+	ADDITIONAL_REG_TEMP_MAXy_OFFSET,
+	ADDITIONAL_REG_ALARM_LEVEL_OFFSET,
+} additional_reg_offset;
+
 void *Modbus::work_thread_cb(void *arg)
 {
 	setbuf(stdout, nullptr);
@@ -317,15 +328,15 @@ void *Modbus::work_thread_cb(void *arg)
 	uint32_t new_response_to_usec;
 	int use_backend;
 	char *ip_or_device;
-	unsigned short input_register_num = 128;
+	unsigned short input_register_num = 0x900;
 	int tmp_num;
-	int read_num = 17 * 4 + 1;
 	int group = 0;
 	int baudRate;
 	int baudRates[] = {115200, 57600, 38400, 19200, 9600, 4800, 2400, 1200, 600};
 	int intervals[9]; // us
 	float queryNum = 0;
 	float errorNum = 0;
+	int tool_num = 0;
 	pthis->errorRate = 0;
 	pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
 	pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
@@ -412,24 +423,49 @@ void *Modbus::work_thread_cb(void *arg)
 	}
 	//modbus_set_response_timeout(pthis->ctx, 0, 70000);
 
+	{
+		rc = modbus_read_input_registers(
+		    pthis->ctx, 0, 1, tab_rp_registers);
+		if (rc < 0)
+			qDebug("get tool_num failed\n");
+		tool_num = tab_rp_registers[0];
+	}
+
 	while (pthis->status == START) {
+while_start:
 		queryNum++;
+
+		pthis->errorRate = errorNum / queryNum;
+		pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
+		pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
+
 		pthis->ui->lineEditQueryNum->setText(QString::number(queryNum));
 		rc = modbus_read_input_registers(
-		    pthis->ctx, 0, read_num, tab_rp_registers);
-
-		group = tab_rp_registers[0];
-		read_num = group * 4 + 1;
-
+		    pthis->ctx, 0, tool_num * 4 + 1, tab_rp_registers);
 		if (rc == -1) {
 			errorNum++;
-			pthis->errorRate = errorNum / queryNum;
-			pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
-			pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
 			qDebug("===============read data failed: %s==================\n",modbus_strerror(errno) );
 			usleep(1000 * pthis->refTime);
 			continue;
 		}
+
+		tool_num = tab_rp_registers[0];
+
+		if (pthis->need_additional_data())
+			for (int i = 0; i < tool_num; i++) {
+				usleep(1000 * 10);
+				queryNum++;
+				rc = modbus_read_input_registers( pthis->ctx, ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1,  6,
+								 tab_rp_registers + ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1);
+				if (rc < 0) {
+					errorNum++;
+					qDebug("read additional data failed: %s\n",modbus_strerror(errno) );
+					usleep(1000 * pthis->refTime);
+					goto while_start;
+				}
+			}
+
+		group = tool_num;
 
 		for (int i = 0; i < group; i++) {
 			QStringList list;
@@ -448,12 +484,25 @@ void *Modbus::work_thread_cb(void *arg)
 			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 3)
 				num = QString("C%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
 				//qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 0xff)
+			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 0xff) {
 				num = QString("full graph");
+
+				if (pthis->need_additional_data())
+					num += QString("(alarm level:%1)").arg(tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_ALARM_LEVEL_OFFSET]);
 				//qDebug("[full graph]\n");
+			}
 			min = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 1 + 1] / 10).arg(tab_rp_registers[i * 4 + 1 + 1] % 10);
+			if (pthis->need_additional_data())
+				min += QString("(%1,%2)").arg(tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_TEMP_MINx_OFFSET])
+				   .arg( tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_TEMP_MINy_OFFSET]);
+
 			avg = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 2 + 1] / 10).arg(tab_rp_registers[i * 4 + 2 + 1] % 10);
+
 			max = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 3 + 1] / 10).arg(tab_rp_registers[i * 4 + 3 + 1] % 10);
+			if (pthis->need_additional_data())
+				max += QString("(%1,%2)").arg(tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_TEMP_MAXx_OFFSET])
+				   .arg( tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_TEMP_MAXy_OFFSET]);
+
 			/* remove the surplus row */
 			if (tmp_num > group)
 				pthis->model->removeRows(group, tmp_num - group);
@@ -565,7 +614,6 @@ int Modbus::worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, 
 	char *ip_or_device;
 	unsigned short input_register_num = 128;
 	int tmp_num;
-	int read_num = 17 * 4 + 1;
 	int group = 0;
 
 	QString protocol = this->configFile->value(MODBUS_PROTOCOL_SECTION_NAME"Protocol").toString();
@@ -681,5 +729,24 @@ void Modbus::on_btnIdToDisplay_clicked()
 	}
 
 	configFile->setValue(SLAVE_SECTION_NAME"id", id);
+}
+
+
+void Modbus::on_checkBox_stateChanged(int arg1)
+{
+	if (arg1 == Qt::Checked)
+		set_additional_data(1);
+	else
+		set_additional_data(0);
+}
+
+int Modbus::need_additional_data(void)
+{
+	return additional_data;
+}
+
+void Modbus::set_additional_data(int state)
+{
+	additional_data = state;
 }
 

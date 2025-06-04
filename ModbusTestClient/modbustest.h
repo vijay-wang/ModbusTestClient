@@ -61,6 +61,8 @@ public:
 	static void *work_thread_cb(void *arg);
 	static void *scan_thread_cb(void *arg);
 	int worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, void *data, void *out), void *data, void *out);
+	int need_additional_data(void);
+	void set_additional_data(int state);
 
 private slots:
 	void on_btnApplyConfig_clicked();
@@ -79,6 +81,8 @@ private slots:
 
 	void on_btnIdToDisplay_clicked();
 
+	void on_checkBox_stateChanged(int arg1);
+
 private:
 	Ui::Modbus *ui;
 	QSerialPort *serial;
@@ -92,6 +96,7 @@ private:
 	int idToDisplay = 0;
 	modbus_t *ctx = NULL;
 	float errorRate = 0.0;
+	int additional_data = 0;
 
 };
 #endif // MODBUSTEST_H
