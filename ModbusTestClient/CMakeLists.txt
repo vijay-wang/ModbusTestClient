@@ -46,7 +46,24 @@ endif()
 include_directories(${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ModbusTestClient PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 target_link_libraries(ModbusTestClient PRIVATE Qt6::SerialPort)
-target_link_libraries(ModbusTestClient PRIVATE ${PROJECT_SOURCE_DIR}/lib/libmodbus-5.dll)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_library(MODBUS_LIBRARY modbus)
+
+    if(MODBUS_LIBRARY)
+        message(STATUS "Found libmodbus")
+        target_link_libraries(ModbusTestClient PRIVATE modbus)
+    else()
+        message(FATAL_ERROR "libmodbus not found. Please run sudo apt install libmodbus-dev.")
+    endif()
+
+    if(Qt6SerialPort_FOUND)
+        message(STATUS "Found serialport")
+    else()
+        message(FATAL_ERROR "serialport package not found. Please run sudo apt install libqt6serialport6-dev.")
+    endif()
+else()
+    target_link_libraries(ModbusTestClient PRIVATE ${PROJECT_SOURCE_DIR}/lib/libmodbus-5.dll)
+endif()
 
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
