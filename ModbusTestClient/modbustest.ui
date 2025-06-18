@@ -170,7 +170,7 @@
                </sizepolicy>
               </property>
               <property name="placeholderText">
-               <string>refresh time  (ms)</string>
+               <string>refresh interval  (ms)</string>
               </property>
              </widget>
             </item>
@@ -629,7 +629,7 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>Aplly</string>
+             <string>Save and apply</string>
             </property>
            </widget>
           </item>
@@ -816,7 +816,7 @@
      <x>0</x>
      <y>0</y>
      <width>1122</width>
-     <height>25</height>
+     <height>20</height>
     </rect>
    </property>
   </widget>
