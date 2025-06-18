@@ -193,7 +193,11 @@ Modbus::Modbus(QWidget *parent)
 		ui->radioButtonTcp->setChecked(true);
 		toggleAllWidgetsInLayout(ui->vLayoutRTU, false);
 		toggleAllWidgetsInLayout(ui->vLayoutIP, true);
-	}
+    } else { // maybe config.ini file not exist
+        ui->radioButtonTcp->setChecked(true);
+        toggleAllWidgetsInLayout(ui->vLayoutRTU, false);
+        toggleAllWidgetsInLayout(ui->vLayoutIP, true);
+    }
 
 	/* Set default IP */
 	QString ip = configFile->value(IP_SECTION_NAME"IP").toString();
