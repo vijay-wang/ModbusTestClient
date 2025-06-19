@@ -335,6 +335,7 @@ void *Modbus::work_thread_cb(void *arg)
 	int use_backend;
     const char *ip_or_device;
     char rtu_dev[32] = {0};
+    char ip_str[32] = {0};
     unsigned short input_register_num = 0x900;
 	int tmp_num;
 	int group = 0;
@@ -356,7 +357,13 @@ void *Modbus::work_thread_cb(void *arg)
 	QString serialCom = pthis->ui->comboBoxPort->currentText();
 	if (protocol == "TCP") {
 		use_backend = TCP;
-	} else if (protocol == "RTU") {
+        QByteArray ipBytes = ip.toLocal8Bit();
+        ip_or_device = ipBytes.constData();
+#if __linux__
+        memcpy(ip_str, ip_or_device, strlen(ip_or_device));
+        ip_or_device = ip_str;
+#endif
+    } else if (protocol == "RTU") {
 		use_backend = RTU;
         QByteArray serialComBytes = serialCom.toLocal8Bit();
         ip_or_device = serialComBytes.constData();
