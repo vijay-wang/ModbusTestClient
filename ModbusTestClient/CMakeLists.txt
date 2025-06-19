@@ -17,6 +17,8 @@ set(PROJECT_SOURCES
         main.cpp
         modbustest.cpp
         modbustest.h
+        modelselectordialog.cpp
+        modelselectordialog.h
         modbustest.ui
 )
 

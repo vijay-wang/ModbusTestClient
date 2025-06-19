@@ -13,6 +13,7 @@
 #include <QAbstractItemView>
 #include <pthread.h>
 #include <modbus.h>
+#include "modelselectordialog.h"
 
 #ifdef QT_DEBUG
 #define CONFIG_FILE "config.ini"
@@ -52,7 +53,7 @@ class Modbus : public QMainWindow
 	Q_OBJECT
 
 public:
-	Modbus(QWidget *parent = nullptr);
+    Modbus(enum model model, QWidget *parent = nullptr);
 	~Modbus();
 	int setComboxDefalutIndex(QComboBox *combox, const QString &str);
 	void setSerialParameters(void);
@@ -84,6 +85,7 @@ private slots:
 	void on_checkBox_stateChanged(int arg1);
 
 private:
+    int machineModel;
 	Ui::Modbus *ui;
 	QSerialPort *serial;
 	QSettings *configFile;
@@ -99,4 +101,16 @@ private:
 	int additional_data = 0;
 
 };
+
+typedef enum {
+    TOOL_TYPE_NONE = -1, // 全图
+    TOOL_TYPE_POINT= 0,
+    TOOL_TYPE_LINE,
+    TOOL_TYPE_RECTANGLE,
+    TOOL_TYPE_CIRCLE,
+    TOOL_TYPE_SHIELDING,
+    TOOL_TYPE_IRREGUALR,
+    TOOL_TYPE_AUTO_TRACING,
+} tool_type;
+
 #endif // MODBUSTEST_H

@@ -1,4 +1,5 @@
 #include "modbustest.h"
+#include <cstring>
 #include "./ui_modbustest.h"
 #include "modbus.h"
 #include "modbus-rtu.h"
@@ -161,8 +162,9 @@ static void toggleAllWidgetsInLayout(QLayout *layout, bool _switch) {
 	}
 }
 
-Modbus::Modbus(QWidget *parent)
-    : QMainWindow(parent)
+Modbus::Modbus(enum model model, QWidget *parent)
+    : machineModel(model)
+    , QMainWindow(parent)
     , ui(new Ui::Modbus)
 {
 	ui->setupUi(this);
@@ -331,8 +333,9 @@ void *Modbus::work_thread_cb(void *arg)
 	uint32_t new_response_to_sec;
 	uint32_t new_response_to_usec;
 	int use_backend;
-	char *ip_or_device;
-	unsigned short input_register_num = 0x900;
+    const char *ip_or_device;
+    char rtu_dev[32] = {0};
+    unsigned short input_register_num = 0x900;
 	int tmp_num;
 	int group = 0;
 	int baudRate;
@@ -341,7 +344,7 @@ void *Modbus::work_thread_cb(void *arg)
 	float queryNum = 0;
 	float errorNum = 0;
 	int tool_num = 0;
-	pthis->errorRate = 0;
+    pthis->errorRate = 0;
 	pthis->ui->lineEditErrorNum->setText(QString::number(errorNum));
 	pthis->ui->lineEditErrorRate->setText(QString::number(pthis->errorRate));
 
@@ -353,17 +356,22 @@ void *Modbus::work_thread_cb(void *arg)
 	QString serialCom = pthis->ui->comboBoxPort->currentText();
 	if (protocol == "TCP") {
 		use_backend = TCP;
-		ip_or_device = ip.toLatin1().data();
 	} else if (protocol == "RTU") {
 		use_backend = RTU;
-		ip_or_device = serialCom.toLatin1().data();
-	} else {
+        QByteArray serialComBytes = serialCom.toLocal8Bit();
+        ip_or_device = serialComBytes.constData();
+#if __linux__
+        memcpy(rtu_dev, "/dev/", 5);
+        memcpy(rtu_dev + 5, ip_or_device, strlen(ip_or_device));
+        ip_or_device = rtu_dev;
+#endif
+    } else {
 		return NULL;
 	}
 
 	if (ip_or_device[0] == 0)
 		QMessageBox::warning(pthis, "Warning", "Device or ip cannot be null");
-	qDebug("device or ip is: %s\n", ip_or_device);
+    qDebug("device or ip is: %s\n", ip_or_device);
 
 	if (use_backend == TCP) {
 		pthis->ctx = modbus_new_tcp(ip_or_device, 1502);
@@ -477,24 +485,25 @@ while_start:
 			QString min;
 			QString avg;
 			QString max;
-			if ((tab_rp_registers[i * 4 + 1] >> 8) == 0) {
+            if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_POINT) {
 				num = QString("P%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
-			} else if ((tab_rp_registers[i * 4 + 1] >> 8) == 1)
+            } else if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_LINE)
 				num = QString("L%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
-				//qDebug("[L%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 2)
+            else if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_RECTANGLE)
 				num = QString("R%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
-				//qDebug("[R%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 3)
+            else if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_CIRCLE)
 				num = QString("C%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
-				//qDebug("[C%d]\n", tab_rp_registers[i * 4] & 0x0f);
-			else if ((tab_rp_registers[i * 4 + 1] >> 8) == 0xff) {
+            else if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_IRREGUALR)
+                num = QString("G%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
+            else if ((tab_rp_registers[i * 4 + 1] >> 8) == TOOL_TYPE_AUTO_TRACING)
+                num = QString("E%1").arg(tab_rp_registers[i * 4 + 1] & 0x00ff);
+            else if ((char(tab_rp_registers[i * 4 + 1] >> 8)) == TOOL_TYPE_NONE) {
 				num = QString("full graph");
 
-				if (pthis->need_additional_data())
+                if (pthis->need_additional_data())
 					num += QString("(alarm level:%1)").arg(tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_ALARM_LEVEL_OFFSET]);
-				//qDebug("[full graph]\n");
 			}
+
 			min = QString("%1.%2").arg((short)tab_rp_registers[i * 4 + 1 + 1] / 10).arg(tab_rp_registers[i * 4 + 1 + 1] % 10);
 			if (pthis->need_additional_data())
 				min += QString("(%1,%2)").arg(tab_rp_registers[ADDITIONAL_REG_BASE + i * ADDITIONAL_REGs_PER_TOOL + 1 + ADDITIONAL_REG_TEMP_MINx_OFFSET])
@@ -614,8 +623,10 @@ int Modbus::worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, 
 	uint32_t old_response_to_usec;
 	uint32_t new_response_to_sec;
 	uint32_t new_response_to_usec;
-	int use_backend;
-	char *ip_or_device;
+    char rtu_dev[32] = {0};
+    int use_backend;
+    const char *ip_or_device;
+    QByteArray serialComBytes;
 	unsigned short input_register_num = 128;
 	int tmp_num;
 	int group = 0;
@@ -626,15 +637,21 @@ int Modbus::worker(int id, int (*cb)(modbus_t *ctx, uint16_t *tab_rp_registers, 
 		QMessageBox::warning(this, "Warning", "Please select RTU protocol rather than TCP");
 		return -100;
 	} else if (protocol == "RTU") {
-		ip_or_device = serialCom.toLatin1().data();
-	} else {
+        serialComBytes = serialCom.toLocal8Bit();
+        ip_or_device = serialComBytes.constData();
+#if __linux__
+        memcpy(rtu_dev, "/dev/", 5);
+        memcpy(rtu_dev + 5, ip_or_device, strlen(ip_or_device));
+        ip_or_device = rtu_dev;
+#endif
+    } else {
 		QMessageBox::warning(this, "Warning", "Unkown protocl");
 		return -100;
 	}
 
 	if (ip_or_device[0] == 0)
 		QMessageBox::warning(this, "Warning", "Device or ip cannot be null");
-	qDebug("device or ip is: %s\n", ip_or_device);
+    qDebug("device or ip is: %s\n", ip_or_device);
 
 	ctx = modbus_new_rtu(ip_or_device, 115200, 'N', 8, 1);
 	if (ctx == NULL) {
